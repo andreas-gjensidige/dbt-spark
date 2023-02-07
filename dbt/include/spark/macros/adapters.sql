@@ -159,10 +159,52 @@
   {%- endif -%}
 {%- endmacro -%}
 
+{% macro get_column_comment_sql(column_name, column_dict) -%}
+  {% if (column_name|upper in column_dict) -%}
+    {% set matched_column = column_name|upper -%}
+  {% elif (column_name|lower in column_dict) -%}
+    {% set matched_column = column_name|lower -%}
+  {% elif (column_name in column_dict) -%}
+    {% set matched_column = column_name -%}
+  {% else -%}
+    {% set matched_column = None -%}
+  {% endif -%}
+  {% if matched_column -%}
+    {% set comment = column_dict[matched_column]['description'] %}
+    {% set escaped_comment = comment | replace('\'', '\\\'') %}
+    {{ adapter.quote(column_name) if column_dict[column_name]['quote'] else column_name }} comment '{{ escaped_comment }}'
+  {%- else -%}
+    {{ adapter.quote(column_name) if column_dict[column_name]['quote'] else column_name }}
+  {%- endif -%}
+{% endmacro %}
+
+{# {% macro get_persist_docs_column_list(model_columns, query_columns) %}
+(
+  {% for column_name in query_columns %}
+    {{ get_column_comment_sql(column_name, model_columns) }}
+    {{- ", " if not loop.last else "" }}
+  {% endfor %}
+)
+{% endmacro %} #}
+
+{% macro column_comment_clause() %}
+  {% if config.persist_column_docs() -%}
+    {% set model_columns = model.columns %}
+    {% set query_columns = get_columns_in_query(sql) %}
+    {#{{ get_persist_docs_column_list(model_columns, query_columns) }}#}
+    (
+    {% for column_name in query_columns %}
+      {{ get_column_comment_sql(column_name, model_columns) }}
+      {{- ", " if not loop.last else "" }}
+    {% endfor %}
+    )
+  {%- endif %}
+{% endmacro %}
 
 {% macro spark__create_view_as(relation, sql) -%}
   create or replace view {{ relation }}
   {{ comment_clause() }}
+  {{ column_comment_clause() }}
   as
     {{ sql }}
 {% endmacro %}
